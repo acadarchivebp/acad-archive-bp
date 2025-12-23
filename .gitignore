@@ -1,0 +1,29 @@
+# --- macOS System Files (Ignore these!) ---
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# --- Dependencies ---
+**/node_modules
+**/.pnp
+**/.pnp.js
+
+# --- Environment Variables (CRITICAL: Never share secrets) ---
+**/.env
+**/.env.local
+**/.env.production
+**/.env.development
+**/.env*.local
+
+# --- Framework Builds ---
+**/.next
+**/dist
+**/out
+**/.vercel
+
+# --- Logs ---
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.log
