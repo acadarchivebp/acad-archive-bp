@@ -15,11 +15,12 @@ const RESOURCE_TYPES = [
 
 export default function UploadForm() {
   const [loading, setLoading] = useState(false);
+  // NEW: State for progress
+  const [uploadProgress, setUploadProgress] = useState(0); 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [fileHash, setFileHash] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   
-  // Track which button is active (separate from the actual text value)
   const [activeTypeBtn, setActiveTypeBtn] = useState('Lecture Slides');
 
   const supabase = createClient();
@@ -37,13 +38,13 @@ export default function UploadForm() {
     year: '',
     semester: '1',
     prof: '',
-    type: 'Lecture Slides', // Default
+    type: 'Lecture Slides',
   });
 
   const handleTypeClick = (type: string) => {
     setActiveTypeBtn(type);
     if (type === 'Other') {
-      setFormData({ ...formData, type: '' }); // Clear type so user has to type it
+      setFormData({ ...formData, type: '' });
     } else {
       setFormData({ ...formData, type });
     }
@@ -78,13 +79,13 @@ export default function UploadForm() {
       return;
     }
     
-    // Validation for "Other" type
     if (activeTypeBtn === 'Other' && !formData.type.trim()) {
       setMessage({ type: 'error', text: 'Please specify the resource type.' });
       return;
     }
     
     setLoading(true);
+    setUploadProgress(0); // Reset progress
     setMessage(null);
 
     const fileInput = (e.currentTarget.querySelector('input[type="file"]') as HTMLInputElement);
@@ -113,15 +114,38 @@ export default function UploadForm() {
       uploadData.append('year', formData.year);
       uploadData.append('semester', formData.semester);
 
-      const uploadRes = await fetch(process.env.NEXT_PUBLIC_HF_UPLOADER_URL!, {
-        method: 'POST',
-        headers: { 'secret': process.env.NEXT_PUBLIC_UPLOAD_SECRET! },
-        body: uploadData,
-      });
+      // --- CHANGED: Using XMLHttpRequest instead of fetch to track progress ---
+      const responseJson = await new Promise<any>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', process.env.NEXT_PUBLIC_HF_UPLOADER_URL!);
+        xhr.setRequestHeader('secret', process.env.NEXT_PUBLIC_UPLOAD_SECRET!);
 
-      if (!uploadRes.ok) throw new Error('Upload to storage failed.');
-      
-      const responseJson = await uploadRes.json();
+        // Track upload progress
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percentComplete = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(percentComplete);
+          }
+        };
+
+        // Handle response
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText));
+            } catch (e) {
+              reject(new Error('Invalid response from server'));
+            }
+          } else {
+            reject(new Error('Upload to storage failed.'));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during upload.'));
+        xhr.send(uploadData);
+      });
+      // -----------------------------------------------------------------------
+
       const hfPath = responseJson.hf_path || responseJson.path;
 
       const { error: dbError } = await supabase.from('resources').insert({
@@ -129,7 +153,7 @@ export default function UploadForm() {
         year: formData.year,
         semester: parseInt(formData.semester),
         prof: formData.prof,
-        type: formData.type, // This now contains the specific string or custom input
+        type: formData.type,
         filename: file.name,
         hf_path: hfPath,
         file_hash: fileHash,
@@ -140,10 +164,10 @@ export default function UploadForm() {
       if (dbError) throw dbError;
 
       setMessage({ type: 'success', text: 'Resource uploaded successfully!' });
-      // Reset form but keep some defaults
       setFormData({ ...formData, course_id: '', prof: '' }); 
       fileInput.value = '';
       setFileHash(null);
+      setUploadProgress(0); // Reset after success
 
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Error occurred.' });
@@ -208,18 +232,10 @@ export default function UploadForm() {
             ))}
           </div>
 
-          {/* Conditional Input for 'Other' */}
           {activeTypeBtn === 'Other' && (
             <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-              <input 
-                required 
-                type="text" 
-                placeholder="Please specify (e.g. 'Assignment Solutions')" 
-                className={inputClass}
-                value={formData.type} 
-                onChange={(e) => setFormData({ ...formData, type: e.target.value })} 
-                autoFocus
-              />
+              <input required type="text" placeholder="Please specify (e.g. 'Assignment Solutions')" className={inputClass}
+                value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} autoFocus />
             </div>
           )}
         </div>
@@ -251,11 +267,29 @@ export default function UploadForm() {
           {fileHash && <p className="mt-2 text-sm text-green-600 dark:text-green-400 font-medium text-center flex items-center justify-center gap-1"><CheckCircle className="w-4 h-4"/> Ready to upload</p>}
         </div>
 
-        {/* Submit Button */}
-        <button type="submit" disabled={loading}
-          className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl font-semibold shadow-lg shadow-blue-600/20 transition-all transform hover:-translate-y-0.5 flex justify-center items-center gap-2 disabled:opacity-70 disabled:transform-none">
-          {loading ? <span className="animate-pulse">Uploading to Vault...</span> : <><FileUp className="w-5 h-5" /> Contribute Resource</>}
-        </button>
+        {/* Submit Button & Progress Bar */}
+        <div className="space-y-3">
+          {/* Progress Bar (Visible only when loading) */}
+          {loading && (
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden">
+              <div 
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out" 
+                style={{ width: `${uploadProgress}%` }}
+              ></div>
+            </div>
+          )}
+
+          <button type="submit" disabled={loading}
+            className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl font-semibold shadow-lg shadow-blue-600/20 transition-all transform hover:-translate-y-0.5 flex justify-center items-center gap-2 disabled:opacity-70 disabled:transform-none">
+            {loading ? (
+              <span className="flex items-center gap-2">
+                {uploadProgress < 100 ? `Uploading... ${uploadProgress}%` : 'Processing...'}
+              </span>
+            ) : (
+              <><FileUp className="w-5 h-5" /> Contribute Resource</>
+            )}
+          </button>
+        </div>
 
         {/* Status Message */}
         {message && (
