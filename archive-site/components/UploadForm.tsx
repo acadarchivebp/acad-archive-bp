@@ -53,8 +53,8 @@ export default function UploadForm() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 250 * 1024 * 1024) {
-      setMessage({ type: 'error', text: 'File is too large. Max limit is 250MB.' });
+    if (file.size > 500 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'File is too large. Max limit is 500MB.' });
       e.target.value = '';
       return;
     }
@@ -244,7 +244,7 @@ export default function UploadForm() {
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
                       {fileHash ? 'File selected' : 'Click to browse or drag file here'}
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Max size 250MB</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Max size 500MB</p>
                 </div>
             </div>
           </div>
