@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "BITS Archive",
-  description: "Zero-Cost Student Resource Hub",
+  description: "Student Resource Hub",
 };
 
 export default function RootLayout({
